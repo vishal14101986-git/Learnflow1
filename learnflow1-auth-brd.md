@@ -410,4 +410,267 @@ Out-of-scope items are candidates for the platform roadmap and should not be des
 
 ---
 
-*End of section. Stories are ready for estimation; open questions in §4.12 should be resolved before sprint planning.*
+## Appendix A — Authentication Edge Case Register
+
+Every case below is a testable scenario with defined expected behaviour. Cases marked **⚠** are ones where the naive implementation is wrong in a way that is easy to ship and hard to notice.
+
+### A.1 Registration — Duplicate Email
+
+**EC-R-01 — Duplicate of an active, verified account**
+- **Given** an active verified account exists for `learner@example.com`
+  **When** a visitor submits a registration for `learner@example.com`
+  **Then** the API returns the same neutral success response used for a genuine registration, no second account row is created, and the address owner receives a "someone tried to register with your address" email containing sign-in and password-reset links but no new verification link.
+
+**EC-R-02 — Duplicate of an account still pending verification ⚠**
+- **Given** an account for `learner@example.com` exists in `pending_verification` status and was created 3 days ago
+  **When** a visitor submits a registration for that address with a *different* password
+  **Then** the existing password hash is **not** overwritten, no new account is created, the neutral success response is returned, and a fresh verification email is sent to the address — so a genuine owner who never received the first email can proceed, while a third party cannot seize a pending registration.
+
+**EC-R-03 — Duplicate differing only by case or surrounding whitespace**
+- **Given** an account exists for `learner@example.com`
+  **When** a visitor registers as ` Learner@Example.COM `
+  **Then** the input is trimmed and the address normalised to lower case before the uniqueness check, and the request is treated exactly as EC-R-01.
+
+**EC-R-04 — Duplicate differing by provider-specific aliasing ⚠**
+- **Given** an account exists for `learner@gmail.com`
+  **When** a visitor registers as `lear.ner+lms@gmail.com`
+  **Then** the registration is accepted as a distinct account, because LearnFlow does not apply provider-specific alias collapsing. *(This is a deliberate decision — see §4.12; if the business wants one-person-one-account enforcement, it needs a different identity strategy than email normalisation.)*
+
+**EC-R-05 — Concurrent duplicate submissions**
+- **Given** no account exists for `learner@example.com`
+  **When** two registration requests for that address are processed concurrently by different application workers
+  **Then** the unique index on the normalised email column causes one insert to fail, the failing request is handled as EC-R-01 rather than returning a database error, and exactly one account row exists.
+
+**EC-R-06 — Registration attempt while already signed in**
+- **Given** I hold a valid session
+  **When** I submit the registration form
+  **Then** the request is refused and I am redirected to my dashboard with a message that I am already signed in.
+
+**EC-R-07 — Duplicate of a deactivated account**
+- **Given** an account for `learner@example.com` exists in `deactivated` status
+  **When** a visitor registers with that address
+  **Then** no new account is created, the neutral success response is returned, and the address receives an email directing them to support for reactivation — the historical learning record is not orphaned by a second account.
+
+### A.2 Registration — Weak Password
+
+**EC-P-01 — Below minimum length**
+- **Given** I am on the registration form
+  **When** I submit a password of fewer than 10 characters
+  **Then** the account is not created and the message states the minimum length explicitly rather than a generic "invalid password".
+
+**EC-P-02 — Present on the breached-password list**
+- **Given** I submit a password appearing on the configured breached/common-password list
+  **When** the password is validated server-side
+  **Then** the registration is refused with a message explaining the password has appeared in known breaches and must be changed, and the rejected value is not written to any log.
+
+**EC-P-03 — Password derived from the account identifier**
+- **Given** I register as `jane.doe@example.com`
+  **When** I submit a password containing the local part of my email or my display name (case-insensitive)
+  **Then** the registration is refused with an explanation.
+
+**EC-P-04 — Whitespace padding used to reach minimum length ⚠**
+- **Given** I submit `pass      ` (four characters plus trailing spaces)
+  **When** the password is validated
+  **Then** leading and trailing whitespace is stripped **before** the length check, the effective length of 4 fails policy, and the account is not created. Internal whitespace is preserved and permitted.
+
+**EC-P-05 — Excessively long password ⚠**
+- **Given** I submit a password of 5,000 characters
+  **When** the request is processed
+  **Then** it is rejected above 128 characters at the validation layer before any hashing occurs, so a long input cannot be used as a CPU-exhaustion denial-of-service vector.
+
+**EC-P-06 — Multi-byte and emoji characters**
+- **Given** I submit a password containing emoji or non-Latin script
+  **When** it is validated and stored
+  **Then** it is normalised consistently (NFKC) before hashing, accepted if it meets length policy measured in characters rather than bytes, and authenticates successfully on subsequent sign-in.
+
+**EC-P-07 — Confirmation mismatch**
+- **Given** I complete the registration form
+  **When** the password and confirmation fields differ
+  **Then** submission is blocked, both fields retain focus affordance, and no request reaches the server.
+
+**EC-P-08 — Client-side validation bypassed**
+- **Given** a caller posts directly to the registration endpoint with a 3-character password, bypassing the React form
+  **When** the request is processed
+  **Then** the same server-side policy applies and the account is not created — client-side validation is treated as a convenience only.
+
+**EC-P-09 — Weak password submitted at reset rather than registration**
+- **Given** I hold a valid reset token
+  **When** I submit a new password failing any policy rule
+  **Then** the identical policy and messages apply, the token is **not** consumed, and I may retry with the same link.
+
+### A.3 Tokens — Expiry and Validity
+
+**EC-T-01 — Expired access token on a routine request**
+- **Given** my access token expired 30 seconds ago and my refresh token is valid
+  **When** the client calls a protected endpoint
+  **Then** the API returns HTTP 401 with a machine-readable `token_expired` code, the client transparently refreshes and replays the original request once, and I observe no interruption.
+
+**EC-T-02 — Expired access token during an in-flight long request ⚠**
+- **Given** I begin an assignment upload with 90 seconds of token validity remaining and the upload takes 4 minutes
+  **When** the request completes
+  **Then** authorisation is evaluated at request admission, not at completion, so the upload succeeds; the subsequent request triggers a normal refresh.
+
+**EC-T-03 — Expired refresh token**
+- **Given** my refresh token expired while I was away
+  **When** the client attempts renewal
+  **Then** renewal is refused, the cookie is cleared, I am returned to sign-in with the return path preserved, and any unsaved client-side draft is retained locally so it survives re-authentication.
+
+**EC-T-04 — Reuse of an already-rotated refresh token ⚠**
+- **Given** refresh token `A` was exchanged for token `B`
+  **When** token `A` is presented again
+  **Then** the request is refused, the entire token family for that user is revoked, all sessions terminate, and a security event is raised — reuse is treated as evidence of theft, not as a retry.
+
+**EC-T-05 — Concurrent refresh from two browser tabs ⚠**
+- **Given** two tabs detect expiry simultaneously and both call refresh with the same token
+  **When** the requests are processed
+  **Then** a short reuse-grace window (or single-flight locking in the client) allows the second call to receive the same newly issued pair rather than triggering the EC-T-04 theft response — a legitimate race must not sign the user out.
+
+**EC-T-06 — Tampered payload or `alg: none`**
+- **Given** a token whose payload has been edited to elevate the role, or whose header declares `none`
+  **When** it is presented to a protected endpoint
+  **Then** signature verification fails against the explicitly configured algorithm, the request returns 401, and the attempt is logged with source IP.
+
+**EC-T-07 — Valid signature, wrong issuer or audience**
+- **Given** a correctly signed token issued by a non-production LearnFlow environment
+  **When** it is presented to production
+  **Then** issuer and audience claims are validated and the request is refused.
+
+**EC-T-08 — Token valid but the underlying account has changed state ⚠**
+- **Given** an administrator suspends my account while I hold an access token with 12 minutes remaining
+  **When** I call a protected endpoint
+  **Then** account status is checked on each request against a cached status lookup, not inferred solely from the token, and the request is refused with 403.
+
+**EC-T-09 — Role elevated mid-session**
+- **Given** my role is upgraded from `learner` to `instructor`
+  **When** I call an instructor endpoint before my next refresh
+  **Then** the request is refused with 403 until the refreshed token carries the new role; the UI surfaces a "sign in again to activate new permissions" prompt rather than an unexplained error.
+
+**EC-T-10 — Signing key rotated**
+- **Given** the signing key is rotated
+  **When** a token signed with the previous key is presented within its remaining lifetime
+  **Then** verification succeeds against the retired key while it remains in the published key set, and fails once the key is withdrawn after the maximum token lifetime has elapsed.
+
+**EC-T-11 — Clock skew between client and server**
+- **Given** a client clock is 40 seconds ahead of the server
+  **When** a freshly issued token is presented
+  **Then** a small leeway (≤ 60 seconds) is applied to `nbf`/`iat` validation so the token is not rejected as not-yet-valid.
+
+**EC-T-12 — Access token replayed after sign-out**
+- **Given** I signed out 2 minutes ago and my access token has 8 minutes of nominal life left
+  **When** that token is replayed
+  **Then** the request is refused because its token ID is on the revocation list, which is retained for at least the access-token lifetime.
+
+### A.4 Password Reset — Non-Existent and Ineligible Accounts
+
+**EC-X-01 — Reset requested for an address with no account ⚠**
+- **Given** no account exists for `nobody@example.com`
+  **When** a reset is requested for it
+  **Then** the response is byte-identical to the success case, no email is sent to that address, no token row is created, and the response is padded to comparable timing so the absence of hashing and email queuing work is not observable.
+
+**EC-X-02 — Reset requested for a syntactically invalid address**
+- **Given** the submitted value is not a valid email address
+  **When** the form is submitted
+  **Then** it is rejected as a format error — this is the one case where a distinct message is acceptable, since it reveals nothing about account existence.
+
+**EC-X-03 — Reset requested for an unverified account**
+- **Given** an account exists in `pending_verification` status
+  **When** a reset is requested
+  **Then** the neutral response is returned and the email sent contains a verification link rather than a reset link, so the flow cannot be used to activate an address the requester does not control.
+
+**EC-X-04 — Reset requested for a suspended account**
+- **Given** an account is `suspended`
+  **When** a reset is requested
+  **Then** the neutral response is returned, no reset token is issued, and the account owner receives a message directing them to support.
+
+**EC-X-05 — Reset requested for a locked account**
+- **Given** an account is locked following failed sign-in attempts
+  **When** a reset is requested and successfully completed
+  **Then** the lock is cleared and the failed-attempt counter resets, so a legitimate owner is not compelled to wait out the lockout.
+
+**EC-X-06 — Enumeration attempt across many addresses**
+- **Given** a caller submits reset requests for 500 addresses in sequence
+  **When** the requests are processed
+  **Then** per-IP rate limiting rejects the excess with HTTP 429, and the responses returned before the limit is reached are indistinguishable between existing and non-existing accounts.
+
+### A.5 Password Reset — Token Handling
+
+**EC-X-07 — Expired reset token**
+- **Given** my reset token was issued 45 minutes ago
+  **When** I submit a new password
+  **Then** the reset is refused with a message offering to request a fresh link, no password change occurs, and the message does not distinguish expiry from any other invalid-token condition.
+
+**EC-X-08 — Reset token used a second time**
+- **Given** I completed a reset using token `T`
+  **When** I open the same link again and submit
+  **Then** the reset is refused identically to EC-X-07.
+
+**EC-X-09 — Superseded token**
+- **Given** I requested a reset twice and hold tokens `T1` (older) and `T2`
+  **When** I use `T1`
+  **Then** it is refused, because issuing `T2` invalidated `T1`; using `T2` succeeds.
+
+**EC-X-10 — Email security scanner pre-fetches the link ⚠**
+- **Given** my organisation's mail gateway automatically visits every URL in inbound email
+  **When** the reset link is fetched by the scanner
+  **Then** the GET request only renders the form and does **not** consume or invalidate the token; consumption happens exclusively on the POST that submits the new password, so the link still works when I click it.
+
+**EC-X-11 — Reset token value exposure**
+- **Given** a reset link is requested
+  **When** application and proxy logs are inspected
+  **Then** the token appears in no access log, error report or analytics payload; where the token is carried in the URL path or query, log scrubbing is applied at the edge.
+
+**EC-X-12 — New password identical to the current one**
+- **Given** I hold a valid reset token
+  **When** I submit my existing password as the new one
+  **Then** the change is refused with a clear message and the token remains usable for a further attempt.
+
+**EC-X-13 — Concurrent reset submissions with one token**
+- **Given** I submit the reset form twice in rapid succession with the same token
+  **When** both requests are processed
+  **Then** the token consumption is atomic — one request succeeds and the other is refused as already-used, with no possibility of two different passwords being written.
+
+**EC-X-14 — Sessions elsewhere after a completed reset**
+- **Given** I am signed in on a second device
+  **When** I complete a password reset on my laptop
+  **Then** the second device's next request or refresh fails and returns to sign-in, since all refresh tokens for the account were revoked.
+
+**EC-X-15 — Reset completed in a different browser or device from the request**
+- **Given** I requested the reset on desktop and open the link on my phone
+  **When** I submit the new password
+  **Then** the reset succeeds — reset validity depends only on the token, never on session, cookie or device continuity.
+
+### A.6 Cross-Cutting
+
+**EC-C-01 — Correct password on an unverified account**
+- **Given** my account is `pending_verification`
+  **When** I sign in with correct credentials
+  **Then** no token is issued and I am shown the verification-outstanding message with a resend option — verification state is checked before token issuance, not after.
+
+**EC-C-02 — Sign-in attempt against a non-existent account ⚠**
+- **Given** no account exists for the submitted address
+  **When** sign-in is attempted
+  **Then** a dummy hash comparison of equivalent cost is still performed before returning the generic failure, so response timing does not disclose account existence.
+
+**EC-C-03 — Account locked, correct password supplied**
+- **Given** my account is locked
+  **When** I sign in with the correct password
+  **Then** sign-in is refused for the remainder of the lockout window, and the failed-attempt counter is not incremented further by attempts made during the lock.
+
+**EC-C-04 — Password changed in another session**
+- **Given** I changed my password on another device
+  **When** my current session's refresh token is presented
+  **Then** it is refused and I am returned to sign-in.
+
+**EC-C-05 — Email dispatch fails after the account row is committed ⚠**
+- **Given** account creation succeeds but the verification email cannot be queued
+  **When** the transaction completes
+  **Then** the account is retained in `pending_verification`, the user still sees the confirmation screen with a working resend control, and the failure is alerted to operations — a mail outage must not produce accounts that can never be verified or silently lose registrations.
+
+**EC-C-06 — Unverified accounts never completed**
+- **Given** an account has remained `pending_verification` for 30 days
+  **When** the scheduled retention job runs
+  **Then** the account and its tokens are purged, freeing the address for future registration.
+
+---
+
+*End of section. Stories and edge cases are ready for estimation; open questions in §4.12 should be resolved before sprint planning.*
