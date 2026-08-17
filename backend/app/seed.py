@@ -5,7 +5,6 @@ Run with: python -m app.seed
 """
 
 import asyncio
-import itertools
 
 from sqlalchemy import select
 
@@ -15,7 +14,7 @@ from app.models.lesson import Lesson, LessonType
 from app.models.quiz import QuestionType, QuizQuestion
 from app.models.user import User, UserRole, UserStatus
 from app.security.passwords import hash_password
-from app.seed_data import DEFAULT_COURSES, SAMPLE_VIDEO_URLS
+from app.seed_data import DEFAULT_COURSES
 
 DEMO_INSTRUCTOR_EMAIL = "instructor@learnflow.dev"
 DEMO_LEARNER_EMAIL = "learner@learnflow.dev"
@@ -50,8 +49,6 @@ async def seed() -> None:
             await db.commit()
             return
 
-        video_urls = itertools.cycle(SAMPLE_VIDEO_URLS)
-
         for course_data in DEFAULT_COURSES:
             course = Course(
                 instructor_id=instructor.id,
@@ -65,14 +62,13 @@ async def seed() -> None:
                 description=course_data["description"],
             )
             for idx, lesson_data in enumerate(course_data["lessons"]):
-                lesson_type = LessonType(lesson_data["type"])
                 course.lessons.append(
                     Lesson(
                         title=lesson_data["title"],
-                        type=lesson_type,
+                        type=LessonType(lesson_data["type"]),
                         duration=lesson_data["duration"],
                         body=lesson_data["body"],
-                        video_url=next(video_urls) if lesson_type == LessonType.video else None,
+                        video_url=lesson_data.get("video_url"),
                         order_index=idx,
                     )
                 )
