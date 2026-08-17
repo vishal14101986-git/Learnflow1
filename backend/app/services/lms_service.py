@@ -171,7 +171,15 @@ async def get_course_detail(db: AsyncSession, course_id: uuid.UUID, *, user: Use
             quiz_best_score = attempt.score
 
     lessons = [
-        LessonOut(id=l.id, title=l.title, type=l.type, duration=l.duration, body=l.body, done=l.id in completed_ids)
+        LessonOut(
+            id=l.id,
+            title=l.title,
+            type=l.type,
+            duration=l.duration,
+            body=l.body,
+            video_url=l.video_url,
+            done=l.id in completed_ids,
+        )
         for l in course.lessons
     ]
 
@@ -431,7 +439,14 @@ def _apply_course_payload(course: Course, payload: CourseCreate) -> None:
     course.lessons.clear()
     for idx, lesson_in in enumerate(payload.lessons):
         course.lessons.append(
-            Lesson(title=lesson_in.title, type=lesson_in.type, duration=lesson_in.duration, body=lesson_in.body, order_index=idx)
+            Lesson(
+                title=lesson_in.title,
+                type=lesson_in.type,
+                duration=lesson_in.duration,
+                body=lesson_in.body,
+                video_url=lesson_in.video_url,
+                order_index=idx,
+            )
         )
 
     course.quiz_questions.clear()

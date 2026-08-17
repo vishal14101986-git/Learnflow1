@@ -1,5 +1,18 @@
 """Seed course data, ported from the design project's learnflow-data.js."""
 
+# Public-domain sample clips (Google's GTV test bucket) rotated across "video"
+# lessons in seed.py so the demo has something real to play — not meant to
+# match each lesson's subject matter.
+SAMPLE_VIDEO_URLS = [
+    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
+    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+]
+
 DEFAULT_COURSES = [
     {
         "title": "Prompt Engineering Fundamentals", "category": "Generative AI", "level": "Beginner",

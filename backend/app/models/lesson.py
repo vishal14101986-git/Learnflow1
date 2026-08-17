@@ -24,6 +24,7 @@ class Lesson(UUIDPkMixin, Base):
     type: Mapped[LessonType] = mapped_column(Enum(LessonType, native_enum=False, length=16), nullable=False)
     duration: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
     body: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    video_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     course: Mapped["Course"] = relationship(back_populates="lessons")  # noqa: F821

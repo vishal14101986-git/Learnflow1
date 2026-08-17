@@ -1,9 +1,94 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { completeLesson, getCourse } from "../lib/coursesApi";
-import type { CourseDetail } from "../lib/types";
+import type { CourseDetail, LessonOut } from "../lib/types";
 import { CheckCircleIcon, CircleIcon, PlayIcon } from "../components/icons";
 import { CenteredNote } from "../components/Guards";
+
+const YOUTUBE_RE = /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/;
+const VIMEO_RE = /vimeo\.com\/(?:video\/)?(\d+)/;
+const DIRECT_FILE_RE = /\.(mp4|webm|ogg)(\?.*)?$/i;
+
+const IFRAME_ALLOW = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+
+function VideoPlayer({ url }: { url: string }) {
+  const boxStyle: React.CSSProperties = {
+    height: 320,
+    borderRadius: "var(--radius-lg)",
+    background: "var(--color-neutral-800)",
+    marginBottom: "var(--space-5)",
+    overflow: "hidden",
+  };
+
+  const youtube = url.match(YOUTUBE_RE);
+  if (youtube) {
+    return (
+      <div style={boxStyle}>
+        <iframe
+          src={`https://www.youtube-nocookie.com/embed/${youtube[1]}`}
+          title="Lesson video"
+          style={{ width: "100%", height: "100%", border: 0 }}
+          allow={IFRAME_ALLOW}
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+
+  const vimeo = url.match(VIMEO_RE);
+  if (vimeo) {
+    return (
+      <div style={boxStyle}>
+        <iframe
+          src={`https://player.vimeo.com/video/${vimeo[1]}`}
+          title="Lesson video"
+          style={{ width: "100%", height: "100%", border: 0 }}
+          allow={IFRAME_ALLOW}
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+
+  if (DIRECT_FILE_RE.test(url) && (url.startsWith("http://") || url.startsWith("https://"))) {
+    return (
+      <div style={boxStyle}>
+        <video controls src={url} style={{ width: "100%", height: "100%" }} />
+      </div>
+    );
+  }
+
+  // Unrecognized host/format — don't embed an arbitrary URL in an iframe, link out instead.
+  return (
+    <div style={{ ...boxStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "var(--space-3)" }}>
+      <PlayIcon size={56} />
+      {url.startsWith("http://") || url.startsWith("https://") ? (
+        <a className="btn btn-secondary" href={url} target="_blank" rel="noopener noreferrer">
+          Watch video
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+function LessonVideo({ lesson }: { lesson: LessonOut }) {
+  if (lesson.video_url) return <VideoPlayer url={lesson.video_url} />;
+  return (
+    <div
+      style={{
+        height: 320,
+        borderRadius: "var(--radius-lg)",
+        background: "var(--color-neutral-800)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: "var(--space-5)",
+      }}
+    >
+      <PlayIcon size={56} />
+    </div>
+  );
+}
 
 export function LessonPlayerPage() {
   const { courseId, lessonId } = useParams<{ courseId: string; lessonId: string }>();
@@ -82,11 +167,7 @@ export function LessonPlayerPage() {
           </div>
           <h1 style={{ fontFamily: "var(--font-heading)", fontSize: 28, margin: "0 0 var(--space-4)" }}>{lesson.title}</h1>
 
-          {lesson.type === "video" && (
-            <div style={{ height: 320, borderRadius: "var(--radius-lg)", background: "var(--color-neutral-800)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "var(--space-5)" }}>
-              <PlayIcon size={56} />
-            </div>
-          )}
+          {lesson.type === "video" && <LessonVideo lesson={lesson} />}
 
           <p style={{ lineHeight: 1.7, fontSize: 16, margin: "0 0 var(--space-6)" }}>{lesson.body}</p>
 

@@ -15,6 +15,7 @@ interface DraftLesson {
   type: LessonType;
   duration: number;
   body: string;
+  videoUrl: string;
 }
 
 interface DraftOption {
@@ -33,7 +34,7 @@ interface DraftQuestion {
 }
 
 function blankLesson(): DraftLesson {
-  return { key: uid(), title: "New lesson", type: "video", duration: 10, body: "" };
+  return { key: uid(), title: "New lesson", type: "video", duration: 10, body: "", videoUrl: "" };
 }
 
 function blankQuestion(): DraftQuestion {
@@ -74,7 +75,7 @@ export function InstructorCourseBuilderPage() {
       setLevel(course.level);
       setDuration(course.duration_hrs);
       setDescription(course.description);
-      setLessons(course.lessons.map((l) => ({ key: uid(), title: l.title, type: l.type, duration: l.duration, body: l.body })));
+      setLessons(course.lessons.map((l) => ({ key: uid(), title: l.title, type: l.type, duration: l.duration, body: l.body, videoUrl: l.video_url ?? "" })));
       setQuestions(
         quiz.map((q) => ({
           key: uid(),
@@ -137,7 +138,13 @@ export function InstructorCourseBuilderPage() {
         rating: null,
         swatch: 0,
         description,
-        lessons: lessons.map((l) => ({ title: l.title, type: l.type, duration: l.duration, body: l.body })),
+        lessons: lessons.map((l) => ({
+          title: l.title,
+          type: l.type,
+          duration: l.duration,
+          body: l.body,
+          video_url: l.type === "video" && l.videoUrl.trim() ? l.videoUrl.trim() : null,
+        })),
         quiz_questions: questions.map((q) => {
           if (q.type === "mcq") {
             return { type: "mcq" as const, text: q.text, options: q.options.map((o) => o.value), answer: q.answerIndex };
@@ -238,6 +245,18 @@ export function InstructorCourseBuilderPage() {
                   <button type="button" className="btn-icon" title="Remove" onClick={() => removeLesson(l.key)}><TrashIcon /></button>
                 </div>
               </div>
+              {l.type === "video" && (
+                <div className="field" style={{ margin: "0 0 var(--space-3)" }}>
+                  <label>Video URL</label>
+                  <input
+                    className="input"
+                    type="url"
+                    placeholder="https://... (direct .mp4 file, YouTube, or Vimeo link)"
+                    value={l.videoUrl}
+                    onChange={(e) => updateLesson(l.key, { videoUrl: e.target.value })}
+                  />
+                </div>
+              )}
               <div className="field" style={{ margin: 0 }}>
                 <label>Content</label>
                 <textarea className="input" rows={2} value={l.body} onChange={(e) => updateLesson(l.key, { body: e.target.value })} />

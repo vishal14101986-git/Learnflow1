@@ -26,6 +26,7 @@ export interface LessonOut {
   type: LessonType;
   duration: number;
   body: string;
+  video_url: string | null;
   done: boolean;
 }
 
@@ -35,6 +36,7 @@ export interface LessonIn {
   type: LessonType;
   duration: number;
   body: string;
+  video_url?: string | null;
 }
 
 export interface QuizQuestionOut {

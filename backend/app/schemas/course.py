@@ -1,10 +1,18 @@
 import uuid
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.course import CourseLevel
 from app.models.lesson import LessonType
 from app.models.quiz import QuestionType
+
+
+def _validate_video_url(value: str | None) -> str | None:
+    if value is None or value == "":
+        return None
+    if not value.startswith("http://") and not value.startswith("https://"):
+        raise ValueError("video_url must be an http:// or https:// URL")
+    return value
 
 
 # ---------- lessons ----------
@@ -14,6 +22,7 @@ class LessonOut(BaseModel):
     type: LessonType
     duration: int
     body: str
+    video_url: str | None = None
     done: bool = False
 
     model_config = {"from_attributes": True}
@@ -25,6 +34,9 @@ class LessonIn(BaseModel):
     type: LessonType
     duration: int = Field(ge=1, le=600)
     body: str = ""
+    video_url: str | None = Field(default=None, max_length=1000)
+
+    _validate_video_url = field_validator("video_url")(_validate_video_url)
 
 
 # ---------- quiz ----------
