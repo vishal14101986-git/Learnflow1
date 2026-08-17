@@ -1,16 +1,14 @@
 """Seed course data, ported from the design project's learnflow-data.js."""
 
-# Public-domain sample clips (Google's GTV test bucket) rotated across "video"
-# lessons in seed.py so the demo has something real to play — not meant to
-# match each lesson's subject matter.
+# Public-domain sample clips rotated across "video" lessons in seed.py so the
+# demo has something real to play — not meant to match each lesson's subject
+# matter. Verified reachable (200, video/mp4) as of 2026-08-17; Google's old
+# gtv-videos-bucket sample set now returns 403 AccessDenied, so this uses
+# W3Schools' and MDN's own <video>-element demo assets instead.
 SAMPLE_VIDEO_URLS = [
-    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
-    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+    "https://www.w3schools.com/html/mov_bbb.mp4",
+    "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
 ]
 
 DEFAULT_COURSES = [
